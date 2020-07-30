@@ -9,10 +9,15 @@
 import UIKit
 import MapKit
 import SnapKit
+import CoreLocation
 
 class ViewController: UIViewController {
     
-    let titleLabel: UILabel = {
+    private var locationManager: CLLocationManager
+    
+    let regionInMeters: Double = 10_000
+    
+    private let titleLabel: UILabel = {
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textAlignment = .center
@@ -21,16 +26,26 @@ class ViewController: UIViewController {
         return label
     }()
     
-    let mapView: MKMapView = {
+    private let mapView: MKMapView = {
         let map = MKMapView()
         map.translatesAutoresizingMaskIntoConstraints = false
         return map
     }()
+    
+    init() {
+        locationManager = CLLocationManager()
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
         setUpLayout()
+        checkLocationServices()
     }
     
     func setUpLayout() {
@@ -55,5 +70,56 @@ class ViewController: UIViewController {
             make.trailing.equalTo(view)
             make.bottom.equalTo(view.layoutMarginsGuide)
         }
+    }
+    
+    func checkLocationServices() {
+        if CLLocationManager.locationServicesEnabled() {
+            setUpLocationManager()
+            checkLocationAuthorization()
+        } else {
+            // Show alert inidcating user that location is needed
+        }
+    }
+    
+    func setUpLocationManager() {
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+    
+    func checkLocationAuthorization() {
+        switch CLLocationManager.authorizationStatus() {
+        case .authorizedWhenInUse, .authorizedAlways:
+            mapView.showsUserLocation = true
+            centerViewOnUserLocation()
+            break
+        case .denied:
+            // Show alert instructing user how to turn on permissions
+            break
+        case .notDetermined:
+            locationManager.requestAlwaysAuthorization()
+            break
+        case .restricted:
+            // Show alert displaying restricted status
+            break
+        default:
+            // Default for additional cases
+            break
+        }
+    }
+    
+    func centerViewOnUserLocation() {
+        guard let location = locationManager.location?.coordinate else { return }
+        let region = MKCoordinateRegion(center: location, latitudinalMeters: regionInMeters, longitudinalMeters: regionInMeters)
+        mapView.setRegion(region, animated: true)
+    }
+}
+
+extension ViewController: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+
     }
 }
