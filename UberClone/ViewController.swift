@@ -11,18 +11,38 @@ import MapKit
 import SnapKit
 import CoreLocation
 
+struct LocationData {
+    let streetNumber: String
+    let streetName: String
+}
+
 class ViewController: UIViewController {
     
-    private var locationManager: CLLocationManager
+    private let locationManager: CLLocationManager
+    private let geoCoder = CLGeocoder()
+    private let destinationMarker = MKPointAnnotation()
     
-    let regionInMeters: Double = 10_00
+    let regionInMeters: Double = 1_000
     
     private let titleLabel: UILabel = {
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textAlignment = .center
         label.text = "Pick location"
-        label.backgroundColor = .green
+        return label
+    }()
+    
+    private let startingLocationLabel: UILabel = {
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.text = "From:"
+        return label
+    }()
+    
+    private let destinationLocationLabel: UILabel = {
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.text = "To:"
         return label
     }()
     
@@ -50,6 +70,7 @@ class ViewController: UIViewController {
     
     func setUpLayout() {
         setUpTitle()
+        setUpLocationLabels()
         setUpMap()
     }
     
@@ -62,12 +83,28 @@ class ViewController: UIViewController {
         }
     }
     
+    func setUpLocationLabels() {
+        view.addSubview(startingLocationLabel)
+        view.addSubview(destinationLocationLabel)
+        startingLocationLabel.snp.makeConstraints { make in
+            make.leading.equalTo(view)
+            make.top.equalTo(titleLabel.snp.bottom)
+            make.trailing.equalTo(view.snp.centerX)
+        }
+        destinationLocationLabel.snp.makeConstraints { make in
+            make.leading.equalTo(startingLocationLabel.snp.trailing)
+            make.top.equalTo(titleLabel.snp.bottom)
+            make.trailing.equalTo(view)
+        }
+    }
+    
     func setUpMap() {
+        mapView.addAnnotation(destinationMarker)
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(onMapTapped(gestureRecognizer:)))
         mapView.addGestureRecognizer(tapGesture)
         view.addSubview(mapView)
         mapView.snp.makeConstraints { make in
-            make.top.equalTo(titleLabel.snp.bottom)
+            make.top.equalTo(startingLocationLabel.snp.bottom)
             make.leading.equalTo(view)
             make.trailing.equalTo(view)
             make.bottom.equalTo(view.layoutMarginsGuide)
@@ -111,21 +148,53 @@ class ViewController: UIViewController {
     }
     
     func centerViewOnUserLocation() {
-        guard let location = locationManager.location?.coordinate else { return }
-        let region = MKCoordinateRegion(center: location, latitudinalMeters: regionInMeters, longitudinalMeters: regionInMeters)
+        guard let location = locationManager.location else { return }
+        let coordinates = location.coordinate
+        let region = MKCoordinateRegion(center: coordinates, latitudinalMeters: regionInMeters, longitudinalMeters: regionInMeters)
         mapView.setRegion(region, animated: true)
+        getGeocodeLication(for: location) { (locationData) in
+            DispatchQueue.main.async { [weak self] in
+                self?.startingLocationLabel.text = "From: \(locationData.streetNumber) \(locationData.streetName)"
+            }
+        }
+    }
+    
+    func getGeocodeLication(for coordinates: CLLocation, handler: @escaping (LocationData) -> Void) {
+        geoCoder.reverseGeocodeLocation(coordinates) { (placemarks, error) in
+            if let error = error {
+                // Show error alert
+                return
+            }
+            
+            guard let placemark = placemarks?.first else {
+                // Alert for no placemarks returned?
+                return
+            }
+            
+            let streetNumber = placemark.subThoroughfare ?? ""
+            let streenName = placemark.thoroughfare ?? ""
+            let locationData = LocationData(streetNumber: streetNumber, streetName: streenName)
+            handler(locationData)
+        }
     }
     
     @objc func onMapTapped(gestureRecognizer: UIGestureRecognizer) {
         let touchPoint = gestureRecognizer.location(in: mapView)
         let coordinates = mapView.convert(touchPoint, toCoordinateFrom: mapView)
         let location = CLLocation(latitude: coordinates.latitude, longitude: coordinates.longitude)
+        destinationMarker.coordinate = coordinates
+        getGeocodeLication(for: location) { (locationData) in
+            DispatchQueue.main.async { [weak self] in
+                self?.destinationLocationLabel.text = "To: \(locationData.streetNumber) \(locationData.streetName)"
+            }
+        }
         
-        let wayAnnotation = MKPointAnnotation()
-        wayAnnotation.coordinate = coordinates
-        wayAnnotation.title = "waypoint"
-        mapView.addAnnotation(wayAnnotation)
+//        let wayAnnotation = MKPointAnnotation()
+//        wayAnnotation.coordinate = coordinates
+//        mapView.addAnnotation(wayAnnotation)
     }
+    
+    
 }
 
 extension ViewController: CLLocationManagerDelegate {
